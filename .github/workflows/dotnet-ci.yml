@@ -1,0 +1,29 @@
+name: .NET WPF CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    # ВАЖНО: WPF собирается только на Windows!
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        # Указываем .NET 10 (если выйдет релиз, или используем preview, если он еще в разработке)
+        dotnet-version: '10.0.x' 
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      # Собираем в Release конфигурации без восстановления пакетов (мы уже сделали restore)
+      run: dotnet build --no-restore --configuration Release
