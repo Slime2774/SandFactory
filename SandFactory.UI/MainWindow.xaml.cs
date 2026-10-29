@@ -10,6 +10,6 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainViewModel(); // <-- вот эта строка важна
+        DataContext = new MainViewModel();
     }
 }

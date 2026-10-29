@@ -1,15 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace SandFactory.UI;
 
-namespace SandFactory.UI
+public class SimulationSnapshot
 {
-    // DTO: передаем из DoWork в ProgressChanged
-    public class SimulationSnapshot
-    {
-        public long Ticks { get; set; }       // Сколько тактов прошло
-        public int CurrentPower { get; set; } // Текущая мощность (читается из UI)
-        public double ContainerVolume { get; set; } // Заглушка: объем песка (пока 0)
-        public long Money { get; set; }       // Заглушка: деньги (пока 0)
-    }
+    public long Ticks { get; set; }
+    public int CurrentPower { get; set; }
+    public double ContainerVolume { get; set; }
+    public double ContainerMax { get; set; }
+    public long MoneyEarnedThisTick { get; set; }
+    public double[] TransporterLoads { get; set; } = new double[5];
+
+    // Флаг для лога переполнения
+    public bool IsOverflowing { get; set; }
 }
