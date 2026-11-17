@@ -2,127 +2,757 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SandFactory.UI"
-        Title="SandFactory — Симулятор (Этап 3)" Height="600" Width="850">
+        Title="SandFactory 2D — Лабораторная №3 (BackgroundWorker)"
+        Height="780" Width="1380" MinHeight="680" MinWidth="1180"
+        Background="#0F131A" Foreground="#E2E8F0"
+        WindowStartupLocation="CenterScreen">
 
-    <!-- Регистрируем наш конвертер, чтобы XAML его видел -->
     <Window.Resources>
-        <local:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter" />
+        <local:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="PanelCard" TargetType="Border">
+            <Setter Property="Background" Value="#181E29"/>
+            <Setter Property="BorderBrush" Value="#2A3344"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="14"/>
+        </Style>
+
+        <Style x:Key="StatBadge" TargetType="Border">
+            <Setter Property="Background" Value="#0F131A"/>
+            <Setter Property="BorderBrush" Value="#2A3344"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="#263042"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#3B4861"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#33415C"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Стиль кнопки-переключателя Авто-баланса -->
+        <Style x:Key="AutoBalanceToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="BorderBrush" Value="#3B4861"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#0E7490"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#22D3EE"/>
+                                <Setter Property="Foreground" Value="#ECFEFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="10">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*"/>
-            <ColumnDefinition Width="1*"/>
-        </Grid.ColumnDefinitions>
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="130"/>
+        </Grid.RowDefinitions>
 
-        <!-- ЛЕВАЯ КОЛОНКА: ИГРА -->
-        <Grid Grid.Column="0" Margin="0,0,10,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- ==================== 1. ВЕРХНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ + АВТО-БАЛАНС + КПД ==================== -->
+        <Border Grid.Row="0" Style="{StaticResource PanelCard}" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-                <Button Content="▶ Старт" Command="{Binding StartCommand}" Width="100" Margin="0,0,10,0" Padding="5"/>
-                <Button Content="⏹ Стоп" Command="{Binding StopCommand}" Width="100" Padding="5"/>
-            </StackPanel>
-
-            <StackPanel Grid.Row="1" Margin="0,0,0,15">
-                <TextBlock Text="Мощность конвейера:" Margin="0,0,0,5"/>
-                <StackPanel Orientation="Horizontal">
-                    <Slider Value="{Binding ConveyorPower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="0" Maximum="{Binding MaxPower, Mode=OneWay}" Width="300" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding ConveyorPower, StringFormat={}{0}%}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                    <TextBlock Text="{Binding MaxPower, StringFormat=(Лимит: {0}%)}" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="Gray"/>
+                <!-- Кнопки старта/остановки, авто-баланс и статус -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Button Content="▶ СТАРТ" Command="{Binding StartCommand}"
+                            Style="{StaticResource ActionButton}" Background="#15803D" BorderBrush="#22C55E" Margin="0,0,8,0"/>
+                    <Button Content="⏹ СТОП" Command="{Binding StopCommand}"
+                            Style="{StaticResource ActionButton}" Background="#B91C1C" BorderBrush="#EF4444" Margin="0,0,8,0"/>
+                    <ToggleButton Content="🤖 Авто-баланс" IsChecked="{Binding IsAutoBalanceEnabled}"
+                                  Style="{StaticResource AutoBalanceToggle}" Margin="0,0,10,0"
+                                  ToolTip="Автоматически регулирует мощность главного конвейера для удержания бункера на уровне ~60%"/>
+                    <Border Background="#0F131A" CornerRadius="6" Padding="10,6" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding StatusText}" Foreground="#94A3B8" FontFamily="Consolas" FontSize="12"/>
+                    </Border>
                 </StackPanel>
-            </StackPanel>
 
-            <StackPanel Grid.Row="2" Margin="0,0,0,15">
-                <TextBlock Text="{Binding StatusText}" FontStyle="Italic" Foreground="Gray" Margin="0,0,0,5"/>
-                <TextBlock>
-                    <Run Text="Объем в контейнере: "/>
-                    <Run Text="{Binding ContainerVolume, StringFormat={}{0:F1}}" FontWeight="Bold"/>
-                </TextBlock>
-                <TextBlock>
-                    <Run Text="Монеты: "/>
-                    <Run Text="{Binding Money}" FontWeight="Bold" Foreground="Green" FontSize="16"/>
-                </TextBlock>
-            </StackPanel>
+                <!-- Сводная статистика завода по центру -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border Style="{StaticResource StatBadge}">
+                        <StackPanel>
+                            <TextBlock Text="ОТГРУЗКА" FontSize="9" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding TotalOutflowPerSec, StringFormat={}{0:F1} т/с}"
+                                       FontSize="15" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
-            <!-- КОНТЕЙНЕР (Кастомный бар) -->
-            <StackPanel Grid.Row="3" Margin="0,0,0,20">
-                <TextBlock Text="Заполненность контейнера:" Margin="0,0,0,5"/>
-                <Border Height="30" Background="#EEE" BorderBrush="Gray" BorderThickness="1">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="{Binding ContainerFillPercentage, Converter={StaticResource PercentToGridLengthConverter}}"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Rectangle Grid.Column="0" Fill="Orange" />
-                    </Grid>
-                </Border>
-            </StackPanel>
+                    <Border Style="{StaticResource StatBadge}">
+                        <StackPanel>
+                            <TextBlock Text="РЕЙСОВ" FontSize="9" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding TotalTrips}"
+                                       FontSize="15" FontWeight="Bold" Foreground="#FACC15" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
-            <!-- ТРАНСПОРТЕРЫ (Кастомные бары) -->
-            <StackPanel Grid.Row="4">
-                <TextBlock Text="Транспортеры (нагрузка):" Margin="0,0,0,5"/>
-                <ItemsControl ItemsSource="{Binding TransporterLoads}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Columns="5" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="5">
-                                <Border Height="20" Background="#EEE" BorderBrush="Gray" BorderThickness="1">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="{Binding Path=., Converter={StaticResource PercentToGridLengthConverter}}"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Rectangle Grid.Column="0" Fill="DodgerBlue" />
-                                    </Grid>
-                                </Border>
-                                <TextBlock Text="{Binding Path=., StringFormat={}{0:F0}%}" HorizontalAlignment="Center" FontSize="10" Margin="0,3,0,0"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Grid>
-
-        <!-- ПРАВАЯ КОЛОНКА: МАГАЗИН И ЛОГИ -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <GroupBox Grid.Row="0" Header="Магазин / Прокачка" Margin="0,0,0,10" Padding="10">
-                <StackPanel>
-                    <TextBlock Text="{Binding ConveyorLevel, StringFormat=Уровень конвейера: {0}}" FontWeight="Bold"/>
-                    <Button Content="{Binding ConveyorUpgradeCost, StringFormat=Улучшить конвейер ({0} монет)}" 
-                            Command="{Binding UpgradeConveyorCommand}" Margin="0,5,0,15" Padding="5"/>
-
-                    <TextBlock Text="{Binding TransporterLevel, StringFormat=Уровень транспортеров: {0}}" FontWeight="Bold"/>
-                    <Button Content="{Binding TransporterUpgradeCost, StringFormat=Улучшить транспортеры ({0} монет)}" 
-                            Command="{Binding UpgradeTransportersCommand}" Margin="0,5,0,0" Padding="5"/>
+                    <Border Style="{StaticResource StatBadge}" Margin="0">
+                        <StackPanel>
+                            <TextBlock Text="ВЫВЕЗЕНО" FontSize="9" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{Binding TotalShippedTons, StringFormat={}{0:F1} т}"
+                                       FontSize="15" FontWeight="Bold" Foreground="#4ADE80" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </GroupBox>
 
-            <GroupBox Grid.Row="1" Header="Лог событий" Padding="5">
-                <ListBox ItemsSource="{Binding Logs}" FontSize="11" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </GroupBox>
-        </Grid>
+                <!-- Управление линиями -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="➕ Добавить транспортер" Command="{Binding AddTransporterCommand}"
+                            Style="{StaticResource ActionButton}" Background="#1D4ED8" BorderBrush="#3B82F6" Margin="0,0,8,0"/>
+                    <Button Content="➖ Убрать" Command="{Binding RemoveTransporterCommand}"
+                            Style="{StaticResource ActionButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ==================== 2. ЕДИНЫЙ ПРОИЗВОДСТВЕННЫЙ ЦЕХ ==================== -->
+        <Border Grid.Row="1" Style="{StaticResource PanelCard}" Margin="0,0,0,12" Padding="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                    <TextBlock FontWeight="Bold" FontSize="12">
+                        <Run Text="1. КАРЬЕР (ГОРКА ПЕСКА) → ЭКСКАВАТОР → КОНВЕЙЕР" Foreground="#38BDF8"/>
+                        <Run Text="   ➔   " Foreground="#64748B"/>
+                        <Run Text="2. БУНКЕР С ВОРОНКОЙ" Foreground="#FBBF24"/>
+                        <Run Text="   ➔   " Foreground="#64748B"/>
+                        <Run Text="3. ТРАНСПОРТЕРЫ (BackgroundWorker) И ГРУЗОВИКИ" Foreground="#4ADE80"/>
+                    </TextBlock>
+                    <TextBlock DockPanel.Dock="Right" Text="{Binding Transporters.Count, StringFormat=Активных линий: {0}}"
+                               Foreground="#94A3B8" FontSize="12"/>
+                </DockPanel>
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="420"/>
+                        <ColumnDefinition Width="210"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ==================== ЗОНА 1: ВЫБОР СЫРЬЯ + ГОРКА ПЕСКА + ЭКСКАВАТОР (ВИБРАЦИЯ + ПЫЛЬ) + КОНВЕЙЕР ==================== -->
+                    <Border Grid.Column="0" Background="#0B111E" BorderBrush="#2A3344" BorderThickness="1,1,0,1"
+                            CornerRadius="8,0,0,8" ClipToBounds="True">
+                        <Grid>
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Panel.ZIndex="10"
+                                    Background="#E6181E29" BorderBrush="#334155" BorderThickness="1" CornerRadius="8" Padding="10,7">
+                                <StackPanel>
+                                    <TextBlock Text="Порода для добычи:" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                                    <ComboBox ItemsSource="{Binding SandTypes}" SelectedItem="{Binding SelectedSandType}"
+                                              Width="185" FontWeight="SemiBold" Padding="6,4"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Viewbox Stretch="Uniform" VerticalAlignment="Bottom">
+                                <Canvas Width="420" Height="370">
+                                    <Path Data="M 0,262 Q 20,256 40,262 T 76,262 L 76,370 L 0,370 Z" Fill="#0284C7"/>
+                                    <TextBlock Text="МОРЕ" Canvas.Left="12" Canvas.Top="305" Foreground="#BAE6FD" FontWeight="Bold" FontSize="11"/>
+
+                                    <Path Data="M 62,370 L 76,262 L 420,262 L 420,370 Z" Fill="#1E293B"/>
+                                    <Path Data="M 68,370 L 82,268 L 420,268 L 420,370 Z" Fill="{Binding SelectedSandType.PrimaryBrush}" Opacity="0.45"/>
+
+                                    <!-- Большая горка песка -->
+                                    <Path Data="M 145,264 Q 200,148 258,264 Z" Fill="{Binding SelectedSandType.PrimaryBrush}"/>
+                                    <Path Data="M 162,264 Q 202,172 244,264 Z" Fill="{Binding SelectedSandType.SecondaryBrush}"/>
+
+                                    <!-- ПЫЛЕВЫЕ ЧАСТИЦЫ В ТОЧКЕ КОПАНИЯ ЭКСКАВАТОРА -->
+                                    <Canvas Visibility="{Binding IsMainConveyorMoving, Converter={StaticResource BoolToVis}}">
+                                        <Ellipse x:Name="DigDust1" Canvas.Left="195" Canvas.Top="218" Width="6" Height="6"
+                                                 Fill="{Binding SelectedSandType.SecondaryBrush}" Opacity="0.7">
+                                            <Ellipse.Triggers>
+                                                <EventTrigger RoutedEvent="Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust1" Storyboard.TargetProperty="(Canvas.Top)" From="225" To="185" Duration="0:0:0.9"/>
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust1" Storyboard.TargetProperty="(Canvas.Left)" From="195" To="175" Duration="0:0:0.9"/>
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust1" Storyboard.TargetProperty="Opacity" From="0.85" To="0" Duration="0:0:0.9"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Ellipse.Triggers>
+                                        </Ellipse>
+                                        <Ellipse x:Name="DigDust2" Canvas.Left="205" Canvas.Top="222" Width="8" Height="8"
+                                                 Fill="{Binding SelectedSandType.PrimaryBrush}" Opacity="0.6">
+                                            <Ellipse.Triggers>
+                                                <EventTrigger RoutedEvent="Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust2" Storyboard.TargetProperty="(Canvas.Top)" From="228" To="182" BeginTime="0:0:0.3" Duration="0:0:1.0"/>
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust2" Storyboard.TargetProperty="(Canvas.Left)" From="205" To="222" BeginTime="0:0:0.3" Duration="0:0:1.0"/>
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust2" Storyboard.TargetProperty="Opacity" From="0.8" To="0" BeginTime="0:0:0.3" Duration="0:0:1.0"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Ellipse.Triggers>
+                                        </Ellipse>
+                                        <Ellipse x:Name="DigDust3" Canvas.Left="200" Canvas.Top="220" Width="5" Height="5"
+                                                 Fill="{Binding SelectedSandType.SecondaryBrush}" Opacity="0.7">
+                                            <Ellipse.Triggers>
+                                                <EventTrigger RoutedEvent="Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust3" Storyboard.TargetProperty="(Canvas.Top)" From="226" To="178" BeginTime="0:0:0.6" Duration="0:0:0.85"/>
+                                                            <DoubleAnimation Storyboard.TargetName="DigDust3" Storyboard.TargetProperty="Opacity" From="0.9" To="0" BeginTime="0:0:0.6" Duration="0:0:0.85"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Ellipse.Triggers>
+                                        </Ellipse>
+                                    </Canvas>
+
+                                    <!-- ЭКСКАВАТОР С ВИБРАЦИЕЙ ДВИГАТЕЛЯ ПРИ РАБОТЕ -->
+                                    <Canvas>
+                                        <Canvas.RenderTransform>
+                                            <TranslateTransform Y="0"/>
+                                        </Canvas.RenderTransform>
+                                        <Canvas.Style>
+                                            <Style TargetType="Canvas">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMainConveyorMoving}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard x:Name="ExcVibe">
+                                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(Canvas.RenderTransform).(TranslateTransform.Y)"
+                                                                                     From="0" To="-1.2" Duration="0:0:0.06"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <StopStoryboard BeginStoryboardName="ExcVibe"/>
+                                                        </DataTrigger.ExitActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Canvas.Style>
+
+                                        <Rectangle Canvas.Left="84" Canvas.Top="242" Width="64" Height="19" RadiusX="8" RadiusY="8"
+                                                   Fill="#1E293B" Stroke="#64748B" StrokeThickness="2"/>
+                                        <Ellipse Canvas.Left="90" Canvas.Top="246" Width="11" Height="11" Fill="#64748B"/>
+                                        <Ellipse Canvas.Left="110" Canvas.Top="246" Width="11" Height="11" Fill="#64748B"/>
+                                        <Ellipse Canvas.Left="130" Canvas.Top="246" Width="11" Height="11" Fill="#64748B"/>
+                                        <Rectangle Canvas.Left="90" Canvas.Top="212" Width="46" Height="30" RadiusX="4" RadiusY="4" Fill="#EAB308"/>
+                                        <Rectangle Canvas.Left="114" Canvas.Top="217" Width="18" Height="15" RadiusX="2" RadiusY="2" Fill="#38BDF8"/>
+
+                                        <Canvas Canvas.Left="134" Canvas.Top="224">
+                                            <Canvas.RenderTransform>
+                                                <RotateTransform x:Name="ExcavatorArmRotate" Angle="0"/>
+                                            </Canvas.RenderTransform>
+                                            <Canvas.Triggers>
+                                                <EventTrigger RoutedEvent="Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                            <DoubleAnimation Storyboard.TargetName="ExcavatorArmRotate"
+                                                                             Storyboard.TargetProperty="Angle"
+                                                                             From="-12" To="8" Duration="0:0:1.0"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Canvas.Triggers>
+                                            <Line X1="0" Y1="0" X2="48" Y2="-38" Stroke="#CA8A04" StrokeThickness="7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Line X1="48" Y1="-38" X2="68" Y2="8" Stroke="#CA8A04" StrokeThickness="6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Path Data="M 56,6 L 78,6 L 80,20 L 60,22 Z" Fill="#475569"/>
+                                            <Ellipse Canvas.Left="58" Canvas.Top="2" Width="18" Height="8" Fill="{Binding SelectedSandType.SecondaryBrush}"/>
+                                        </Canvas>
+                                    </Canvas>
+
+                                    <Polygon Points="232,198 264,198 256,216 240,216" Fill="#475569" Stroke="#94A3B8" StrokeThickness="1.5"/>
+
+                                    <Line X1="265" Y1="212" X2="265" Y2="262" Stroke="#64748B" StrokeThickness="4"/>
+                                    <Line X1="335" Y1="180" X2="335" Y2="262" Stroke="#64748B" StrokeThickness="4"/>
+                                    <Line X1="402" Y1="150" X2="402" Y2="262" Stroke="#64748B" StrokeThickness="4"/>
+
+                                    <!-- Главный конвейер с вибрацией -->
+                                    <Canvas Canvas.Left="240" Canvas.Top="194">
+                                        <Canvas.RenderTransform>
+                                            <TransformGroup>
+                                                <RotateTransform Angle="-24"/>
+                                                <TranslateTransform Y="0"/>
+                                            </TransformGroup>
+                                        </Canvas.RenderTransform>
+                                        <Canvas.Style>
+                                            <Style TargetType="Canvas">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMainConveyorMoving}" Value="True">
+                                                        <DataTrigger.EnterActions>
+                                                            <BeginStoryboard x:Name="MainConvVibe">
+                                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                    <DoubleAnimation Storyboard.TargetProperty="(Canvas.RenderTransform).(TransformGroup.Children)[1].(TranslateTransform.Y)"
+                                                                                     From="0" To="-0.9" Duration="0:0:0.05"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </DataTrigger.EnterActions>
+                                                        <DataTrigger.ExitActions>
+                                                            <StopStoryboard BeginStoryboardName="MainConvVibe"/>
+                                                        </DataTrigger.ExitActions>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Canvas.Style>
+
+                                        <Rectangle Width="196" Height="32" RadiusX="12" RadiusY="12" Fill="#1E293B" Stroke="#64748B" StrokeThickness="2"/>
+                                        <Ellipse Canvas.Left="6" Canvas.Top="7" Width="16" Height="16" Fill="#94A3B8"/>
+                                        <Ellipse Canvas.Left="174" Canvas.Top="7" Width="16" Height="16" Fill="#94A3B8"/>
+
+                                        <Border Canvas.Left="26" Canvas.Top="4" Width="144" Height="24"
+                                                Background="#0F172A" BorderBrush="#475569" BorderThickness="1" CornerRadius="6" Padding="4,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Slider Grid.Column="0" Minimum="0" Maximum="{Binding MaxPower}" Value="{Binding ConveyorPower}"
+                                                        VerticalAlignment="Center" ToolTip="Мощность главного конвейера (0-100%)"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding ConveyorPower, StringFormat={}{0}%}"
+                                                           Foreground="#FBBF24" FontWeight="Bold" FontSize="10"
+                                                           VerticalAlignment="Center" Margin="3,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Line X1="12" Y1="1" X2="184" Y2="1" Stroke="{Binding SelectedSandType.SecondaryBrush}" StrokeThickness="2.5" StrokeDashArray="4 3">
+                                            <Line.Triggers>
+                                                <EventTrigger RoutedEvent="Loaded">
+                                                    <BeginStoryboard>
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset"
+                                                                             From="14" To="0" Duration="0:0:0.6"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </EventTrigger>
+                                            </Line.Triggers>
+                                        </Line>
+
+                                        <Canvas Visibility="{Binding IsMainConveyorMoving, Converter={StaticResource BoolToVis}}">
+                                            <Path x:Name="MainSand1" Data="M 0,0 Q 10,-11 20,0 Z" Fill="{Binding SelectedSandType.SecondaryBrush}" Canvas.Top="0">
+                                                <Path.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation Storyboard.TargetName="MainSand1"
+                                                                                 Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                 From="8" To="174" Duration="0:0:1.6"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Path.Triggers>
+                                            </Path>
+                                            <Path x:Name="MainSand2" Data="M 0,0 Q 10,-11 20,0 Z" Fill="{Binding SelectedSandType.PrimaryBrush}" Canvas.Top="0">
+                                                <Path.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation Storyboard.TargetName="MainSand2"
+                                                                                 Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                 From="8" To="174" BeginTime="0:0:0.53" Duration="0:0:1.6"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Path.Triggers>
+                                            </Path>
+                                            <Path x:Name="MainSand3" Data="M 0,0 Q 10,-11 20,0 Z" Fill="{Binding SelectedSandType.SecondaryBrush}" Canvas.Top="0">
+                                                <Path.Triggers>
+                                                    <EventTrigger RoutedEvent="Loaded">
+                                                        <BeginStoryboard>
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation Storyboard.TargetName="MainSand3"
+                                                                                 Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                 From="8" To="174" BeginTime="0:0:1.06" Duration="0:0:1.6"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </EventTrigger>
+                                                </Path.Triggers>
+                                            </Path>
+                                        </Canvas>
+                                    </Canvas>
+                                </Canvas>
+                            </Viewbox>
+                        </Grid>
+                    </Border>
+
+                    <!-- ==================== ЗОНА 2: БУНКЕР С ВОРОНКОЙ И РАСПРЕДЕЛИТЕЛЬНОЙ ШАХТОЙ ==================== -->
+                    <Border Grid.Column="1" Background="#0F131A" BorderBrush="#2A3344" BorderThickness="0,1,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="18"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="110"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Margin="8,14,12,0">
+                                    <Border Background="#0B111E" BorderBrush="#64748B" BorderThickness="3,3,3,0" CornerRadius="8,8,0,0" ClipToBounds="True">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="{Binding ContainerFillPercentage, Converter={StaticResource PercentToGridLengthConverter}}"/>
+                                            </Grid.RowDefinitions>
+                                            <Border Grid.Row="1"
+                                                    Background="{Binding SelectedSandType.PrimaryBrush}"
+                                                    BorderBrush="{Binding SelectedSandType.SecondaryBrush}"
+                                                    BorderThickness="0,3,0,0"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding ContainerFillPercentage, StringFormat={}{0:F0}%}"
+                                                   FontSize="24" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect ShadowDepth="1" BlurRadius="4" Color="Black"/>
+                                            </TextBlock.Effect>
+                                        </TextBlock>
+                                        <TextBlock HorizontalAlignment="Center" FontSize="12" Foreground="White">
+                                            <TextBlock.Effect>
+                                                <DropShadowEffect ShadowDepth="1" BlurRadius="3" Color="Black"/>
+                                            </TextBlock.Effect>
+                                            <Run Text="{Binding ContainerVolume, Mode=OneWay, StringFormat={}{0:F1}}"/>
+                                            <Run Text="/"/>
+                                            <Run Text="{Binding ContainerMax, Mode=OneWay, StringFormat={}{0:F0}}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Canvas Grid.Row="1" Width="192" Height="110">
+                                    <Polygon Points="8,0 180,0 116,50 72,50" Fill="{Binding SelectedSandType.PrimaryBrush}" Stroke="#64748B" StrokeThickness="2.5"/>
+                                    <Rectangle Canvas.Left="75" Canvas.Top="50" Width="38" Height="15" Fill="#334155" Stroke="#64748B" StrokeThickness="2"/>
+
+                                    <Polygon Points="100,54 192,24 192,42 114,66" Fill="#334155" Stroke="#94A3B8" StrokeThickness="2"/>
+                                    <Line X1="106" Y1="59" X2="190" Y2="32" Stroke="{Binding SelectedSandType.SecondaryBrush}" StrokeThickness="4" StrokeDashArray="4 3">
+                                        <Line.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever">
+                                                        <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset"
+                                                                         From="14" To="0" Duration="0:0:0.45"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Line.Triggers>
+                                    </Line>
+
+                                    <TextBlock Text="Воронка + шнек ➔" Canvas.Left="20" Canvas.Top="82" FontSize="11" Foreground="#94A3B8"/>
+                                </Canvas>
+                            </Grid>
+
+                            <Border Grid.Column="1" Background="#1E293B" BorderBrush="#64748B" BorderThickness="1.5,1,1.5,1"
+                                    CornerRadius="4,0,0,4" Margin="0,6,0,6">
+                                <Line X1="7.5" Y1="0" X2="7.5" Y2="1000" Stroke="{Binding SelectedSandType.SecondaryBrush}" StrokeThickness="5" StrokeDashArray="6 4"
+                                      Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}">
+                                    <Line.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset"
+                                                                     From="20" To="0" Duration="0:0:0.5"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Line.Triggers>
+                                </Line>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- ==================== ЗОНА 3: ТРАНСПОРТЕРЫ (ВИБРАЦИЯ + ПЫЛЬ) -> ГРУЗОВИКИ ==================== -->
+                    <Border Grid.Column="2" Background="#0F131A" BorderBrush="#2A3344" BorderThickness="0,1,1,1"
+                            CornerRadius="0,8,8,0" Padding="0,6,8,6">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Transporters}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#151B26" BorderBrush="#2A3344" BorderThickness="0,1,1,1"
+                                                CornerRadius="0,8,8,0" Padding="0,4,10,4" Margin="0,0,0,6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="345"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Grid.Column="0" ClipToBounds="True" Height="74">
+                                                    <Canvas Width="345" Height="74">
+                                                        <Polygon Points="0,10 34,10 34,20 0,20" Fill="#334155" Stroke="#64748B" StrokeThickness="1.5"/>
+                                                        <Polygon Points="22,8 52,8 46,28 28,28" Fill="#475569" Stroke="#94A3B8" StrokeThickness="1.5"/>
+
+                                                        <Line X1="2" Y1="15" X2="37" Y2="15"
+                                                              Stroke="{Binding DataContext.SelectedSandType.SecondaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              StrokeThickness="3.5" StrokeDashArray="4 2"
+                                                              Visibility="{Binding IsCarryingSand, Converter={StaticResource BoolToVis}}"/>
+                                                        <Line X1="37" Y1="15" X2="37" Y2="32"
+                                                              Stroke="{Binding DataContext.SelectedSandType.SecondaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              StrokeThickness="3.5" StrokeDashArray="3 2"
+                                                              Visibility="{Binding IsCarryingSand, Converter={StaticResource BoolToVis}}"/>
+
+                                                        <TextBlock Text="{Binding Id, StringFormat=Транспортер #{0}}" Canvas.Left="60" Canvas.Top="6"
+                                                                   FontWeight="Bold" FontSize="12" Foreground="#F1F5F9"/>
+
+                                                        <Line X1="46" Y1="58" X2="46" Y2="72" Stroke="#475569" StrokeThickness="3"/>
+                                                        <Line X1="220" Y1="58" X2="220" Y2="72" Stroke="#475569" StrokeThickness="3"/>
+
+                                                        <!-- Вибрирующий корпус транспортера при подаче песка -->
+                                                        <Canvas Canvas.Left="26" Canvas.Top="32">
+                                                            <Canvas.RenderTransform>
+                                                                <TranslateTransform Y="0"/>
+                                                            </Canvas.RenderTransform>
+                                                            <Canvas.Style>
+                                                                <Style TargetType="Canvas">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsCarryingSand}" Value="True">
+                                                                            <DataTrigger.EnterActions>
+                                                                                <BeginStoryboard x:Name="BeltVibe">
+                                                                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                                                        <DoubleAnimation Storyboard.TargetProperty="(Canvas.RenderTransform).(TranslateTransform.Y)"
+                                                                                                         From="0" To="-0.8" Duration="0:0:0.05"/>
+                                                                                    </Storyboard>
+                                                                                </BeginStoryboard>
+                                                                            </DataTrigger.EnterActions>
+                                                                            <DataTrigger.ExitActions>
+                                                                                <StopStoryboard BeginStoryboardName="BeltVibe"/>
+                                                                            </DataTrigger.ExitActions>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Canvas.Style>
+
+                                                            <Rectangle Width="212" Height="28" RadiusX="11" RadiusY="11"
+                                                                       Fill="#1E293B" Stroke="#64748B" StrokeThickness="1.5"/>
+
+                                                            <Ellipse Canvas.Left="6" Canvas.Top="7" Width="14" Height="14" Fill="#94A3B8"/>
+                                                            <Ellipse Canvas.Left="192" Canvas.Top="7" Width="14" Height="14" Fill="#94A3B8"/>
+
+                                                            <Border Canvas.Left="26" Canvas.Top="3" Width="160" Height="22"
+                                                                    Background="#0F172A" BorderBrush="#475569" BorderThickness="1" CornerRadius="5" Padding="4,0">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Slider Grid.Column="0" Minimum="0" Maximum="100" Value="{Binding Power}"
+                                                                            VerticalAlignment="Center" ToolTip="Мощность транспортера (0-100%)"/>
+                                                                    <TextBlock Grid.Column="1" Text="{Binding Power, StringFormat={}{0}%}"
+                                                                               Foreground="#38BDF8" FontWeight="Bold" FontSize="10"
+                                                                               VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                                                </Grid>
+                                                            </Border>
+
+                                                            <Line X1="10" Y1="1" X2="202" Y2="1" Stroke="#38BDF8" StrokeThickness="2" StrokeDashArray="4 3">
+                                                                <Line.Triggers>
+                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset"
+                                                                                                 From="14" To="0" Duration="0:0:0.5"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Line.Triggers>
+                                                            </Line>
+                                                        </Canvas>
+
+                                                        <!-- Кучки песка на транспортере + струя и пыль над кузовом грузовика -->
+                                                        <Canvas Visibility="{Binding IsCarryingSand, Converter={StaticResource BoolToVis}}">
+                                                            <Path x:Name="BeltSand1" Data="M 0,0 Q 8,-9 16,0 Z"
+                                                                  Fill="{Binding DataContext.SelectedSandType.SecondaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  Canvas.Top="32">
+                                                                <Path.Triggers>
+                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetName="BeltSand1"
+                                                                                                 Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                                 From="34" To="222" Duration="0:0:1.2"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Path.Triggers>
+                                                            </Path>
+
+                                                            <Path x:Name="BeltSand2" Data="M 0,0 Q 8,-9 16,0 Z"
+                                                                  Fill="{Binding DataContext.SelectedSandType.PrimaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  Canvas.Top="32">
+                                                                <Path.Triggers>
+                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetName="BeltSand2"
+                                                                                                 Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                                 From="34" To="222" BeginTime="0:0:0.6" Duration="0:0:1.2"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Path.Triggers>
+                                                            </Path>
+
+                                                            <!-- Струя песка в кузов -->
+                                                            <Line X1="238" Y1="35" X2="262" Y2="52"
+                                                                  Stroke="{Binding DataContext.SelectedSandType.SecondaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  StrokeThickness="3.5" StrokeDashArray="2 2"/>
+
+                                                            <!-- Облачка пыли при падении песка в кузов -->
+                                                            <Ellipse x:Name="TruckDust1" Canvas.Left="256" Canvas.Top="44" Width="5" Height="5"
+                                                                     Fill="{Binding DataContext.SelectedSandType.SecondaryBrush, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                                <Ellipse.Triggers>
+                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust1" Storyboard.TargetProperty="(Canvas.Top)" From="46" To="26" Duration="0:0:0.7"/>
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust1" Storyboard.TargetProperty="(Canvas.Left)" From="258" To="246" Duration="0:0:0.7"/>
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust1" Storyboard.TargetProperty="Opacity" From="0.85" To="0" Duration="0:0:0.7"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Ellipse.Triggers>
+                                                            </Ellipse>
+                                                            <Ellipse x:Name="TruckDust2" Canvas.Left="266" Canvas.Top="44" Width="4" Height="4"
+                                                                     Fill="{Binding DataContext.SelectedSandType.PrimaryBrush, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                                <Ellipse.Triggers>
+                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust2" Storyboard.TargetProperty="(Canvas.Top)" From="46" To="28" BeginTime="0:0:0.35" Duration="0:0:0.7"/>
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust2" Storyboard.TargetProperty="(Canvas.Left)" From="264" To="276" BeginTime="0:0:0.35" Duration="0:0:0.7"/>
+                                                                                <DoubleAnimation Storyboard.TargetName="TruckDust2" Storyboard.TargetProperty="Opacity" From="0.85" To="0" BeginTime="0:0:0.35" Duration="0:0:0.7"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Ellipse.Triggers>
+                                                            </Ellipse>
+                                                        </Canvas>
+
+                                                        <!-- 2D-САМОСВАЛ (ГРУЗОВИК) -->
+                                                        <Canvas x:Name="TruckCanvas" Canvas.Left="246" Canvas.Top="28">
+                                                            <Canvas.Style>
+                                                                <Style TargetType="Canvas">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsTruckLeaving}" Value="True">
+                                                                            <DataTrigger.EnterActions>
+                                                                                <BeginStoryboard>
+                                                                                    <Storyboard>
+                                                                                        <DoubleAnimation Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                                         From="246" To="366" Duration="0:0:0.85">
+                                                                                            <DoubleAnimation.EasingFunction>
+                                                                                                <QuadraticEase EasingMode="EaseIn"/>
+                                                                                            </DoubleAnimation.EasingFunction>
+                                                                                        </DoubleAnimation>
+                                                                                    </Storyboard>
+                                                                                </BeginStoryboard>
+                                                                            </DataTrigger.EnterActions>
+                                                                            <DataTrigger.ExitActions>
+                                                                                <BeginStoryboard>
+                                                                                    <Storyboard>
+                                                                                        <DoubleAnimation Storyboard.TargetProperty="(Canvas.Left)"
+                                                                                                         From="228" To="246" Duration="0:0:0.35"/>
+                                                                                    </Storyboard>
+                                                                                </BeginStoryboard>
+                                                                            </DataTrigger.ExitActions>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Canvas.Style>
+
+                                                            <Polyline Points="2,14 2,34 34,34 34,14" Stroke="#3B82F6" StrokeThickness="2.5" Fill="#172554"/>
+                                                            <Rectangle Canvas.Left="4" Canvas.Bottom="-32" Width="28"
+                                                                       Height="{Binding TruckFillHeight}"
+                                                                       Fill="{Binding DataContext.SelectedSandType.PrimaryBrush, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                            <Path Data="M 35,16 L 48,16 L 54,24 L 54,34 L 35,34 Z" Fill="#2563EB"/>
+                                                            <Polygon Points="42,18 47,18 51,24 42,24" Fill="#BAE6FD"/>
+                                                            <Ellipse Canvas.Left="6" Canvas.Top="31" Width="10" Height="10" Fill="#0F172A" Stroke="#94A3B8" StrokeThickness="2"/>
+                                                            <Ellipse Canvas.Left="38" Canvas.Top="31" Width="10" Height="10" Fill="#0F172A" Stroke="#94A3B8" StrokeThickness="2"/>
+                                                        </Canvas>
+                                                    </Canvas>
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding Status}" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right"/>
+                                                    <TextBlock HorizontalAlignment="Right" FontWeight="SemiBold" Foreground="#60A5FA" Margin="0,2,0,0">
+                                                        <Run Text="{Binding Id, Mode=OneWay, StringFormat=Грузовик #{0}}"/>
+                                                        <Run Text="{Binding TripsCompleted, Mode=OneWay, StringFormat= (Рейсов: {0})}" Foreground="#FACC15"/>
+                                                    </TextBlock>
+                                                    <TextBlock HorizontalAlignment="Right" FontSize="11" Foreground="#CBD5E1" Margin="0,2,0,0">
+                                                        <Run Text="Кузов: "/>
+                                                        <Run Text="{Binding CurrentTruckSand, Mode=OneWay, StringFormat={}{0:F1}}"/>
+                                                        <Run Text="/"/>
+                                                        <Run Text="{Binding TruckCapacity, Mode=OneWay, StringFormat={}{0:F0} т}" Foreground="#FBBF24" FontWeight="SemiBold"/>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding TotalSandShipped, Mode=OneWay, StringFormat=Вывезено: {0:F1} т}"
+                                                               FontSize="11" Foreground="#4ADE80" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ==================== 3. ЖУРНАЛ РАБОТЫ ПОТОКОВ ==================== -->
+        <Border Grid.Row="2" Style="{StaticResource PanelCard}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="ЛОГ РАБОТЫ ПОТОКОВ" FontWeight="Bold" Foreground="#94A3B8" FontSize="12" Margin="0,0,0,6"/>
+                <ListBox Grid.Row="1" ItemsSource="{Binding Logs}" Background="#0F131A" BorderBrush="#2A3344"
+                         Foreground="#CBD5E1" FontFamily="Consolas" FontSize="12"/>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

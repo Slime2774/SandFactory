@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 
 namespace SandFactory.UI;
@@ -10,18 +11,12 @@ public class PercentToGridLengthConverter : IValueConverter
     {
         if (value is double percent)
         {
-            // Ограничиваем от 0 до 100, чтобы полоска не улетала за края
-            if (percent < 0) percent = 0;
-            if (percent > 100) percent = 100;
-
-            // Возвращаем ширину в звездах (GridLength). 50% = 50*, остальное - *
-            return new System.Windows.GridLength(percent, System.Windows.GridUnitType.Star);
+            percent = Math.Clamp(percent, 0, 100);
+            return new GridLength(percent, GridUnitType.Star);
         }
-        return new System.Windows.GridLength(0, System.Windows.GridUnitType.Star);
+        return new GridLength(0, GridUnitType.Star);
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        throw new NotImplementedException();
-    }
+        => throw new NotImplementedException();
 }

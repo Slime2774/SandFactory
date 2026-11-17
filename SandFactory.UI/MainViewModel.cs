@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows.Input;
@@ -10,35 +13,59 @@ namespace SandFactory.UI;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    // --- Модели ---
     private readonly Sea _sea = new();
     private readonly Conveyor _conveyor = new();
     private readonly SandContainer _container = new();
-    private readonly Transporter[] _transporters = new Transporter[5];
+    private readonly BackgroundWorker _conveyorWorker;
+    private readonly object _powerLock = new();
 
-    // --- Свойства для UI ---
+    public ObservableCollection<Transporter> Transporters { get; } = new();
+    public ObservableCollection<string> Logs { get; } = new();
+
+    public IReadOnlyList<SandType> SandTypes => Sea.AvailableSandTypes;
+
+    public SandType SelectedSandType
+    {
+        get => _sea.CurrentSand;
+        set
+        {
+            if (value == null || _sea.CurrentSand == value) return;
+            _sea.CurrentSand = value;
+            OnPropertyChanged();
+            AddLog($"Смена сырья на карьере: теперь добывается «{value.Name}» ({value.GenerationRate:F0} т/такт).");
+        }
+    }
+
+    private bool _isAutoBalanceEnabled;
+    public bool IsAutoBalanceEnabled
+    {
+        get => _isAutoBalanceEnabled;
+        set
+        {
+            if (_isAutoBalanceEnabled == value) return;
+            _isAutoBalanceEnabled = value;
+            OnPropertyChanged();
+            AddLog(value
+                ? "[Автоматика] Включен авто-баланс бункера (удержание уровня ~60%)."
+                : "[Автоматика] Авто-баланс отключен (ручное управление).");
+        }
+    }
+
     private int _conveyorPower = 50;
     public int ConveyorPower
     {
-        get => _conveyorPower;
+        get { lock (_powerLock) return _conveyorPower; }
         set
         {
-            if (value < 0) value = 0;
-            if (value > MaxPower) value = MaxPower;
-            _conveyorPower = value;
+            int clamped = Math.Clamp(value, 0, _conveyor.MaxPower);
+            lock (_powerLock) { _conveyorPower = clamped; }
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsMainConveyorMoving));
         }
     }
 
-    public int MaxPower
-    {
-        get => _conveyor.MaxPower;
-        set
-        {
-            _conveyor.MaxPower = value;
-            OnPropertyChanged();
-        }
-    }
+    public int MaxPower => _conveyor.MaxPower;
+    public bool IsMainConveyorMoving => IsRunning && ConveyorPower > 0;
 
     private double _containerVolume;
     public double ContainerVolume
@@ -47,7 +74,6 @@ public class MainViewModel : INotifyPropertyChanged
         set { _containerVolume = value; OnPropertyChanged(); }
     }
 
-    // НОВОЕ: Процент заполнения контейнера (0-100) для кастомного UI
     private double _containerFillPercentage;
     public double ContainerFillPercentage
     {
@@ -55,25 +81,28 @@ public class MainViewModel : INotifyPropertyChanged
         set { _containerFillPercentage = value; OnPropertyChanged(); }
     }
 
-    private double _containerMax = 100.0;
-    public double ContainerMax
+    public double ContainerMax { get; private set; }
+
+    private int _totalTrips;
+    public int TotalTrips
     {
-        get => _containerMax;
-        set { _containerMax = value; OnPropertyChanged(); }
+        get => _totalTrips;
+        set { _totalTrips = value; OnPropertyChanged(); }
     }
 
-    private double[] _transporterLoads = new double[5];
-    public double[] TransporterLoads
+    private double _totalShippedTons;
+    public double TotalShippedTons
     {
-        get => _transporterLoads;
-        set { _transporterLoads = value; OnPropertyChanged(); }
+        get => _totalShippedTons;
+        set { _totalShippedTons = value; OnPropertyChanged(); }
     }
 
-    private long _money;
-    public long Money
+    // Реальная пропускная способность всех транспортеров в тоннах в секунду (такт транспортера = 250мс -> 4 такта/сек)
+    private double _totalOutflowPerSec;
+    public double TotalOutflowPerSec
     {
-        get => _money;
-        set { _money = value; OnPropertyChanged(); }
+        get => _totalOutflowPerSec;
+        set { _totalOutflowPerSec = value; OnPropertyChanged(); }
     }
 
     private bool _isRunning;
@@ -84,206 +113,237 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _isRunning = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsMainConveyorMoving));
+            UpdateFactoryStats();
             CommandManager.InvalidateRequerySuggested();
         }
     }
 
-    private string _statusText = "Ожидание запуска...";
+    private string _statusText = "Система готова к запуску";
     public string StatusText
     {
         get => _statusText;
         set { _statusText = value; OnPropertyChanged(); }
     }
 
-    // --- ПРОКАЧКА И ЭКОНОМИКА ---
-    private int _conveyorLevel = 1;
-    public int ConveyorLevel
-    {
-        get => _conveyorLevel;
-        set { _conveyorLevel = value; OnPropertyChanged(); OnPropertyChanged(nameof(ConveyorUpgradeCost)); }
-    }
-    public long ConveyorUpgradeCost => 100 * _conveyorLevel * _conveyorLevel;
-
-    private int _transporterLevel = 1;
-    public int TransporterLevel
-    {
-        get => _transporterLevel;
-        set { _transporterLevel = value; OnPropertyChanged(); OnPropertyChanged(nameof(TransporterUpgradeCost)); }
-    }
-    public long TransporterUpgradeCost => 50 * _transporterLevel * _transporterLevel;
-
-    public ObservableCollection<string> Logs { get; } = new();
-
-    // --- Команды ---
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
-    public ICommand UpgradeConveyorCommand { get; }
-    public ICommand UpgradeTransportersCommand { get; }
-
-    private readonly BackgroundWorker _worker;
-    private readonly object _powerLock = new object();
+    public ICommand AddTransporterCommand { get; }
+    public ICommand RemoveTransporterCommand { get; }
 
     public MainViewModel()
     {
-        for (int i = 0; i < _transporters.Length; i++)
-            _transporters[i] = new Transporter { Id = i + 1, Speed = 1.0 };
-
         ContainerMax = _container.MaxCapacity;
+        Transporters.CollectionChanged += Transporters_CollectionChanged;
 
-        _worker = new BackgroundWorker
+        for (int i = 1; i <= 5; i++)
+        {
+            Transporters.Add(new Transporter(i, _container));
+        }
+
+        _conveyorWorker = new BackgroundWorker
         {
             WorkerReportsProgress = true,
             WorkerSupportsCancellation = true
         };
+        _conveyorWorker.DoWork += ConveyorWorker_DoWork;
+        _conveyorWorker.ProgressChanged += ConveyorWorker_ProgressChanged;
+        _conveyorWorker.RunWorkerCompleted += (_, _) =>
+        {
+            IsRunning = false;
+            UpdateFactoryStats();
+        };
 
-        _worker.DoWork += Worker_DoWork;
-        _worker.ProgressChanged += Worker_ProgressChanged;
-        _worker.RunWorkerCompleted += Worker_RunWorkerCompleted;
-
-        StartCommand = new RelayCommand(StartSimulation, () => !IsRunning);
-        StopCommand = new RelayCommand(StopSimulation, () => IsRunning);
-        UpgradeConveyorCommand = new RelayCommand(UpgradeConveyor);
-        UpgradeTransportersCommand = new RelayCommand(UpgradeTransporters);
+        StartCommand = new RelayCommand(StartAll, () => !IsRunning);
+        StopCommand = new RelayCommand(StopAll, () => IsRunning);
+        AddTransporterCommand = new RelayCommand(AddTransporter);
+        RemoveTransporterCommand = new RelayCommand(RemoveTransporter, () => Transporters.Count > 1);
     }
 
-    private void StartSimulation()
+    private void Transporters_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (!_worker.IsBusy)
+        if (e.NewItems != null)
         {
-            IsRunning = true;
-            StatusText = "Симуляция запущена...";
-            _worker.RunWorkerAsync();
+            foreach (Transporter t in e.NewItems)
+                t.PropertyChanged += Transporter_PropertyChanged;
+        }
+        if (e.OldItems != null)
+        {
+            foreach (Transporter t in e.OldItems)
+                t.PropertyChanged -= Transporter_PropertyChanged;
+        }
+        UpdateFactoryStats();
+    }
+
+    private void Transporter_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Transporter.TripsCompleted)
+            or nameof(Transporter.TotalSandShipped)
+            or nameof(Transporter.Power)
+            or nameof(Transporter.IsTruckLeaving))
+        {
+            UpdateFactoryStats();
         }
     }
 
-    private void StopSimulation()
+    private void UpdateFactoryStats()
     {
-        if (_worker.IsBusy)
+        TotalTrips = Transporters.Sum(t => t.TripsCompleted);
+        TotalShippedTons = Transporters.Sum(t => t.TotalSandShipped);
+
+        if (!IsRunning)
         {
-            _worker.CancelAsync();
-            StatusText = "Остановка...";
+            TotalOutflowPerSec = 0;
+            return;
         }
+
+        // Считаем сколько тонн в секунду забирают активные транспортеры (4 тика в секунду)
+        TotalOutflowPerSec = Transporters
+            .Where(t => !t.IsTruckLeaving)
+            .Sum(t => t.MaxSpeed * (t.Power / 100.0) * 4.0);
     }
 
-    private void UpgradeConveyor()
+    private void StartAll()
     {
-        if (Money >= ConveyorUpgradeCost)
-        {
-            Money -= ConveyorUpgradeCost;
-            ConveyorLevel++;
-            MaxPower += 50;
-            Logs.Add($"[Магазин] Конвейер улучшен до ур. {ConveyorLevel}. Лимит мощности: {MaxPower}");
-        }
+        if (_conveyorWorker.IsBusy) return;
+
+        IsRunning = true;
+        StatusText = "Конвейер и транспортеры запущены";
+        AddLog($"Запуск линии: добыча сырья «{SelectedSandType.Name}».");
+
+        _conveyorWorker.RunWorkerAsync();
+        foreach (var transporter in Transporters)
+            transporter.Start();
     }
 
-    private void UpgradeTransporters()
+    public void StopAll()
     {
-        if (Money >= TransporterUpgradeCost)
-        {
-            Money -= TransporterUpgradeCost;
-            TransporterLevel++;
-            foreach (var t in _transporters)
-            {
-                t.Speed += 0.5;
-            }
-            Logs.Add($"[Магазин] Транспортеры улучшены до ур. {TransporterLevel}. Скорость: {_transporters[0].Speed:F1}");
-        }
+        if (!_conveyorWorker.IsBusy) return;
+
+        StatusText = "Остановка...";
+        _conveyorWorker.CancelAsync();
+
+        foreach (var transporter in Transporters)
+            transporter.Stop();
+
+        AddLog("Работа всех потоков остановлена.");
     }
 
-    private void Worker_DoWork(object? sender, DoWorkEventArgs e)
+    private void AddTransporter()
+    {
+        int nextId = Transporters.Count + 1;
+        var newTransporter = new Transporter(nextId, _container);
+        Transporters.Add(newTransporter);
+
+        if (IsRunning)
+            newTransporter.Start();
+
+        AddLog($"Добавлен Транспортер #{nextId} и грузовик #{nextId} ({newTransporter.TruckCapacity:F0} т).");
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void RemoveTransporter()
+    {
+        if (Transporters.Count <= 1) return;
+
+        var last = Transporters[^1];
+        last.Dispose();
+        Transporters.RemoveAt(Transporters.Count - 1);
+
+        AddLog($"Удален Транспортер #{last.Id}.");
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private int CalculateAutoBalancedPower(double currentVolume)
+    {
+        double fillPercent = ContainerMax > 0 ? (currentVolume / ContainerMax) * 100.0 : 0;
+
+        if (fillPercent >= 90.0) return 0;
+        if (fillPercent <= 30.0) return 100;
+
+        double error = 60.0 - fillPercent;
+        int targetPower = (int)Math.Round(55.0 + error * 1.5);
+        return Math.Clamp(targetPower, 5, 100);
+    }
+
+    private void ConveyorWorker_DoWork(object? sender, DoWorkEventArgs e)
     {
         var worker = (BackgroundWorker)sender!;
-        long tickCounter = 0;
-        _container.CurrentVolume = 0;
+        int overflowLogCooldown = 0;
 
         while (!worker.CancellationPending)
         {
-            int safePower;
-            lock (_powerLock) { safePower = _conveyorPower; }
+            double currentVolBefore = _container.CurrentVolume;
+            int? autoAdjustedPower = null;
 
-            tickCounter++;
-
-            double generatedSand = _sea.BaseGenerationRate * (safePower / 100.0);
-
-            _container.CurrentVolume += generatedSand;
-            bool isOverflowing = false;
-            if (_container.CurrentVolume > _container.MaxCapacity)
+            if (IsAutoBalanceEnabled)
             {
-                _container.CurrentVolume = _container.MaxCapacity;
-                isOverflowing = true;
+                int calculated = CalculateAutoBalancedPower(currentVolBefore);
+                if (calculated != ConveyorPower)
+                {
+                    lock (_powerLock) { _conveyorPower = calculated; }
+                    autoAdjustedPower = calculated;
+                }
             }
 
-            double totalTakenByTransporters = 0;
-            for (int i = 0; i < _transporters.Length; i++)
+            int power = ConveyorPower;
+            double generatedSand = _sea.BaseGenerationRate * (power / 100.0);
+
+            bool addedWithoutOverflow = _container.TryAddSand(generatedSand);
+            double currentVol = _container.CurrentVolume;
+
+            bool shouldLogOverflow = false;
+            if (!addedWithoutOverflow)
             {
-                var t = _transporters[i];
-                double amountToTake = t.Speed;
-                if (amountToTake > _container.CurrentVolume) amountToTake = _container.CurrentVolume;
-
-                _container.CurrentVolume -= amountToTake;
-                totalTakenByTransporters += amountToTake;
-                t.CurrentLoad = t.Speed > 0 ? (amountToTake / t.Speed) : 0;
-            }
-
-            long earnedMoney = (long)(totalTakenByTransporters * 10);
-
-            var snapshot = new SimulationSnapshot
-            {
-                Ticks = tickCounter,
-                CurrentPower = safePower,
-                ContainerVolume = _container.CurrentVolume,
-                ContainerMax = _container.MaxCapacity,
-                MoneyEarnedThisTick = earnedMoney,
-                IsOverflowing = isOverflowing,
-                TransporterLoads = new double[5]
-            };
-
-            for (int i = 0; i < _transporters.Length; i++)
-                snapshot.TransporterLoads[i] = _transporters[i].CurrentLoad * 100;
-
-            worker.ReportProgress(0, snapshot);
-            Thread.Sleep(100);
-        }
-        e.Cancel = true;
-    }
-
-    private void Worker_ProgressChanged(object? sender, ProgressChangedEventArgs e)
-    {
-        if (e.UserState is SimulationSnapshot snapshot)
-        {
-            ContainerVolume = snapshot.ContainerVolume;
-            ContainerMax = snapshot.ContainerMax;
-
-            // ХИТРОСТЬ: Если контейнер переполнен, рисуем 100%. 
-            // Иначе считаем реальный процент (но не больше 100).
-            if (snapshot.IsOverflowing)
-            {
-                ContainerFillPercentage = 100.0;
+                if (overflowLogCooldown <= 0)
+                {
+                    shouldLogOverflow = true;
+                    overflowLogCooldown = 15;
+                }
+                else
+                {
+                    overflowLogCooldown--;
+                }
             }
             else
             {
-                ContainerFillPercentage = snapshot.ContainerMax > 0
-                    ? (snapshot.ContainerVolume / snapshot.ContainerMax) * 100
-                    : 0;
+                overflowLogCooldown = 0;
             }
 
-            Money += snapshot.MoneyEarnedThisTick;
-            TransporterLoads = snapshot.TransporterLoads;
+            worker.ReportProgress(0, (currentVol, power, shouldLogOverflow, autoAdjustedPower));
+            Thread.Sleep(200);
+        }
 
-            StatusText = $"Такт: {snapshot.Ticks} | Мощность: {snapshot.CurrentPower}%";
+        e.Cancel = true;
+    }
 
-            if (snapshot.IsOverflowing && snapshot.Ticks % 20 == 0)
+    private void ConveyorWorker_ProgressChanged(object? sender, ProgressChangedEventArgs e)
+    {
+        if (e.UserState is ValueTuple<double, int, bool, int?> state)
+        {
+            if (state.Item4.HasValue)
             {
-                Logs.Add($"[Внимание] Контейнер переполнен! Песок просыпается.");
+                OnPropertyChanged(nameof(ConveyorPower));
+                OnPropertyChanged(nameof(IsMainConveyorMoving));
+            }
+
+            ContainerVolume = state.Item1;
+            ContainerFillPercentage = ContainerMax > 0 ? (state.Item1 / ContainerMax) * 100.0 : 0;
+
+            string modeTag = IsAutoBalanceEnabled ? " [АВТО]" : "";
+            StatusText = $"Конвейер{modeTag}: {state.Item2}% | Бункер: {state.Item1:F1} / {ContainerMax:F0}";
+
+            if (state.Item3)
+            {
+                AddLog("[Внимание] Бункер заполнен на 100%! Включите «Авто-баланс» или добавьте транспортер.");
             }
         }
     }
 
-    private void Worker_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
+    private void AddLog(string message)
     {
-        IsRunning = false;
-        if (e.Cancelled) StatusText = "Остановлено.";
-        else if (e.Error != null) StatusText = $"Ошибка: {e.Error.Message}";
+        Logs.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {message}");
+        if (Logs.Count > 50) Logs.RemoveAt(Logs.Count - 1);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

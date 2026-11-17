@@ -1,8 +1,38 @@
 ﻿namespace SandFactory.UI.Models;
 
-// Переименовали Container в SandContainer
 public class SandContainer
 {
-    public double CurrentVolume { get; set; } = 0;
-    public double MaxCapacity { get; set; } = 100.0;
+    private readonly object _syncLock = new();
+    private double _currentVolume;
+
+    public double MaxCapacity { get; } = 100.0;
+
+    public double CurrentVolume
+    {
+        get { lock (_syncLock) return _currentVolume; }
+    }
+
+    public bool TryAddSand(double amount)
+    {
+        lock (_syncLock)
+        {
+            _currentVolume += amount;
+            if (_currentVolume > MaxCapacity)
+            {
+                _currentVolume = MaxCapacity;
+                return false;
+            }
+            return true;
+        }
+    }
+
+    public double TakeSand(double requestedAmount)
+    {
+        lock (_syncLock)
+        {
+            double taken = requestedAmount > _currentVolume ? _currentVolume : requestedAmount;
+            _currentVolume -= taken;
+            return taken;
+        }
+    }
 }
