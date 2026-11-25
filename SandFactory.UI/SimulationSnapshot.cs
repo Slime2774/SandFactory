@@ -7,8 +7,11 @@ public class SimulationSnapshot
     public double ContainerVolume { get; set; }
     public double ContainerMax { get; set; }
     public long MoneyEarnedThisTick { get; set; }
-    public double[] TransporterLoads { get; set; } = new double[5];
+    public int ActiveTrucks { get; set; }
 
-    // Флаг для лога переполнения
-    public bool IsOverflowing { get; set; }
+    // Данные для отрисовки
+    public double[] TruckRoadProgress { get; set; } = new double[5];
+    public double[] TruckLoads { get; set; } = new double[5];
+    public bool[] TruckVisibility { get; set; } = new bool[5];
+    public bool[] TruckFacingRight { get; set; } = new bool[5]; // Кабина смотрит вправо?
 }

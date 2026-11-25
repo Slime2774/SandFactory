@@ -1,128 +1,292 @@
 ﻿<Window x:Class="SandFactory.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SandFactory.UI"
-        Title="SandFactory — Симулятор (Этап 3)" Height="600" Width="850">
+        mc:Ignorable="d"
+        Title="SandFactory Simulator" 
+        Height="720" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        MinHeight="600" MinWidth="1000"
+        FontFamily="Segoe UI">
 
-    <!-- Регистрируем наш конвертер, чтобы XAML его видел -->
+    <!-- Конвертеры и ресурсы -->
     <Window.Resources>
-        <local:PercentToGridLengthConverter x:Key="PercentToGridLengthConverter" />
+        <local:PercentToGridLengthConverter x:Key="PercentToGridLength" />
+        <local:RoadProgressToXConverter x:Key="RoadProgressToX" />
+        <local:TruckCountToVisibilityConverter x:Key="TruckCountToVisibility" />
+
+        <!-- Стиль для современных кнопок -->
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="20,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="8" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="0.85"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Opacity" Value="0.6"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="10">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*"/>
-            <ColumnDefinition Width="1*"/>
-        </Grid.ColumnDefinitions>
+    <Grid>
+        <!-- 1. ФОН: Пляж (от моря к песку, слой 0) -->
+        <Border Panel.ZIndex="0">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                    <GradientStop Color="#006994" Offset="0.0" />
+                    <GradientStop Color="#00BFFF" Offset="0.10" />
+                    <GradientStop Color="#EEDC82" Offset="0.18" />
+                    <GradientStop Color="#F4A460" Offset="1.0" />
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
 
-        <!-- ЛЕВАЯ КОЛОНКА: ИГРА -->
-        <Grid Grid.Column="0" Margin="0,0,10,0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
+        <!-- 2. МОРЕ (Визуальный блок слева, слой 1) -->
+        <Rectangle HorizontalAlignment="Left" Width="150" Fill="#3300BFFF" IsHitTestVisible="False" Panel.ZIndex="1" />
+        <Rectangle HorizontalAlignment="Left" Margin="140,0,0,0" Width="10" Fill="#55FFFFFF" Panel.ZIndex="1" />
+        <!-- Пена -->
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-                <Button Content="▶ Старт" Command="{Binding StartCommand}" Width="100" Margin="0,0,10,0" Padding="5"/>
-                <Button Content="⏹ Стоп" Command="{Binding StopCommand}" Width="100" Padding="5"/>
-            </StackPanel>
+        <!-- ИГРОВОЕ ПОЛЕ -->
+        <Canvas Margin="0,110,0,0" ClipToBounds="True">
 
-            <StackPanel Grid.Row="1" Margin="0,0,0,15">
-                <TextBlock Text="Мощность конвейера:" Margin="0,0,0,5"/>
-                <StackPanel Orientation="Horizontal">
-                    <Slider Value="{Binding ConveyorPower, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                            Minimum="0" Maximum="{Binding MaxPower, Mode=OneWay}" Width="300" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding ConveyorPower, StringFormat={}{0}%}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                    <TextBlock Text="{Binding MaxPower, StringFormat=(Лимит: {0}%)}" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="Gray"/>
+            <!-- 3. ПРОМЫШЛЕННАЯ ЗОНА (Слой 4 - скрывает грузовики слева) -->
+            <Border Canvas.Left="70" Canvas.Top="20" Width="300" Height="500" 
+                    Background="#2A2A2A" BorderBrush="#444" BorderThickness="4" 
+                    CornerRadius="16" Panel.ZIndex="4">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="15" ShadowDepth="10" Opacity="0.5"/>
+                </Border.Effect>
+            </Border>
+
+            <!-- 4. КАРЬЕР ПО ДОБЫЧЕ ПЕСКА (Слой 5) -->
+            <Canvas Canvas.Left="90" Canvas.Top="180" Panel.ZIndex="5">
+                <!-- Яма карьера -->
+                <Path Data="M 0,0 L 160,0 L 120,120 L 40,120 Z" Fill="#3E2723" Stroke="#1B5E20" StrokeThickness="2"/>
+                <Path Data="M 20,20 L 140,20 L 110,100 L 50,100 Z" Fill="#4E342E" />
+                <Path Data="M 40,40 L 120,40 L 100,80 L 60,80 Z" Fill="#5D4037" />
+
+                <!-- Залежи песка -->
+                <Ellipse Canvas.Left="50" Canvas.Top="60" Width="60" Height="30" Fill="#FFD700" Opacity="0.9"/>
+
+                <!-- Экскаватор -->
+                <Path Data="M 50,90 L 70,60 L 90,65" Stroke="#FFC107" StrokeThickness="5" StrokeEndLineCap="Round" Fill="Transparent"/>
+                <Rectangle Canvas.Left="35" Canvas.Top="80" Width="35" Height="25" Fill="#FFA000" RadiusX="4" RadiusY="4"/>
+                <Ellipse Canvas.Left="40" Canvas.Top="100" Width="10" Height="10" Fill="#111"/>
+                <Ellipse Canvas.Left="55" Canvas.Top="100" Width="10" Height="10" Fill="#111"/>
+
+                <!-- Вывеска -->
+                <TextBlock Canvas.Left="45" Canvas.Top="130" Text="КАРЬЕР" Foreground="#AAAAAA" FontWeight="Bold" FontSize="14"/>
+            </Canvas>
+
+            <!-- 5. АНИМИРОВАННЫЙ КОНВЕЙЕР (Слой 5) -->
+            <Canvas Panel.ZIndex="5">
+                <!-- Опоры -->
+                <Line X1="210" Y1="220" X2="210" Y2="350" Stroke="#444" StrokeThickness="6"/>
+                <Line X1="290" Y1="120" X2="290" Y2="350" Stroke="#444" StrokeThickness="6"/>
+
+                <!-- Сама лента конвейера -->
+                <Line X1="170" Y1="220" X2="340" Y2="40" Stroke="#111" StrokeThickness="20" StrokeEndLineCap="Round" StrokeStartLineCap="Round" />
+                <Line X1="170" Y1="220" X2="340" Y2="40" Stroke="#333" StrokeThickness="14" StrokeEndLineCap="Round" StrokeStartLineCap="Round" />
+
+                <!-- Движущийся по ленте песок (анимация) -->
+                <Line X1="170" Y1="220" X2="340" Y2="40" Stroke="#FFD700" StrokeThickness="8" StrokeDashArray="4,4" StrokeEndLineCap="Round">
+                    <Line.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <!-- Анимация сдвига пунктира создает эффект движения песка вверх -->
+                                    <DoubleAnimation Storyboard.TargetProperty="StrokeDashOffset" 
+                                                     From="8" To="0" Duration="0:0:0.4" RepeatBehavior="Forever" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Line.Triggers>
+                </Line>
+            </Canvas>
+
+            <!-- 6. ГЛАВНЫЙ БУНКЕР (Хранилище) (Слой 6 - перекрывает выезд грузовиков) -->
+            <Border Canvas.Left="320" Canvas.Top="30" Width="100" Height="420" 
+                    Background="#CC111111" BorderBrush="#555" BorderThickness="4" CornerRadius="8" Panel.ZIndex="6">
+                <Grid Margin="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="{Binding ContainerFillPercentage, Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                    </Grid.RowDefinitions>
+                    <!-- Накопленный песок в бункере -->
+                    <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,4,4"/>
+
+                    <!-- Декоративная стеклянная панель поверх песка -->
+                    <Border Grid.RowSpan="2" Background="#22FFFFFF" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="4"/>
+                </Grid>
+            </Border>
+
+            <!-- ===================== ДОРОГИ И ГРУЗОВИКИ (Слой 3 - Под бункером и зоной) ===================== -->
+            <!-- Так как ZIndex дорог и грузовиков = 3, они выезжают ИЗ-ПОД бункера (ZIndex=6) и прячутся ПОД зоной (ZIndex=4) -->
+            <Canvas Panel.ZIndex="3">
+                <!-- ДОРОГА 1 (Y=80) -->
+                <Border Canvas.Left="350" Canvas.Top="80" Width="2000" Height="40" Background="#66222222" CornerRadius="0,8,8,0" />
+                <Line Canvas.Left="350" Canvas.Top="100" X1="0" Y1="0" X2="2000" Y2="0" Stroke="#66FFFFFF" StrokeThickness="2" StrokeDashArray="10,10" />
+                <!-- ГРУЗОВИК 1 -->
+                <StackPanel Canvas.Top="82" Canvas.Left="{Binding TruckRoadProgress[0], Converter={StaticResource RoadProgressToX}, Mode=OneWay}" 
+                            Visibility="{Binding ActiveTrucks, Converter={StaticResource TruckCountToVisibility}, ConverterParameter=0, Mode=OneWay}" 
+                            Orientation="Horizontal">
+                    <Border Width="30" Height="36" Background="#E74C3C" CornerRadius="6,0,0,6">
+                        <Border Width="10" Height="20" Background="#88FFFFFF" HorizontalAlignment="Left" Margin="4,0,0,0" CornerRadius="2"/>
+                    </Border>
+                    <Border Width="70" Height="36" BorderBrush="#444" BorderThickness="3" Background="#44000000" CornerRadius="0,6,6,0">
+                        <Grid Margin="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="{Binding TruckLoads[0], Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,2,2"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
-            </StackPanel>
 
-            <StackPanel Grid.Row="2" Margin="0,0,0,15">
-                <TextBlock Text="{Binding StatusText}" FontStyle="Italic" Foreground="Gray" Margin="0,0,0,5"/>
-                <TextBlock>
-                    <Run Text="Объем в контейнере: "/>
-                    <Run Text="{Binding ContainerVolume, StringFormat={}{0:F1}}" FontWeight="Bold"/>
-                </TextBlock>
-                <TextBlock>
-                    <Run Text="Монеты: "/>
-                    <Run Text="{Binding Money}" FontWeight="Bold" Foreground="Green" FontSize="16"/>
-                </TextBlock>
-            </StackPanel>
+                <!-- ДОРОГА 2 (Y=150) -->
+                <Border Canvas.Left="350" Canvas.Top="150" Width="2000" Height="40" Background="#66222222" CornerRadius="0,8,8,0" />
+                <Line Canvas.Left="350" Canvas.Top="170" X1="0" Y1="0" X2="2000" Y2="0" Stroke="#66FFFFFF" StrokeThickness="2" StrokeDashArray="10,10" />
+                <StackPanel Canvas.Top="152" Canvas.Left="{Binding TruckRoadProgress[1], Converter={StaticResource RoadProgressToX}, Mode=OneWay}" Visibility="{Binding ActiveTrucks, Converter={StaticResource TruckCountToVisibility}, ConverterParameter=1, Mode=OneWay}" Orientation="Horizontal">
+                    <Border Width="30" Height="36" Background="#E74C3C" CornerRadius="6,0,0,6">
+                        <Border Width="10" Height="20" Background="#88FFFFFF" HorizontalAlignment="Left" Margin="4,0,0,0" CornerRadius="2"/>
+                    </Border>
+                    <Border Width="70" Height="36" BorderBrush="#444" BorderThickness="3" Background="#44000000" CornerRadius="0,6,6,0">
+                        <Grid Margin="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="{Binding TruckLoads[1], Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,2,2"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
 
-            <!-- КОНТЕЙНЕР (Кастомный бар) -->
-            <StackPanel Grid.Row="3" Margin="0,0,0,20">
-                <TextBlock Text="Заполненность контейнера:" Margin="0,0,0,5"/>
-                <Border Height="30" Background="#EEE" BorderBrush="Gray" BorderThickness="1">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="{Binding ContainerFillPercentage, Converter={StaticResource PercentToGridLengthConverter}}"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Rectangle Grid.Column="0" Fill="Orange" />
-                    </Grid>
+                <!-- ДОРОГА 3 (Y=220) -->
+                <Border Canvas.Left="350" Canvas.Top="220" Width="2000" Height="40" Background="#66222222" CornerRadius="0,8,8,0" />
+                <Line Canvas.Left="350" Canvas.Top="240" X1="0" Y1="0" X2="2000" Y2="0" Stroke="#66FFFFFF" StrokeThickness="2" StrokeDashArray="10,10" />
+                <StackPanel Canvas.Top="222" Canvas.Left="{Binding TruckRoadProgress[2], Converter={StaticResource RoadProgressToX}, Mode=OneWay}" Visibility="{Binding ActiveTrucks, Converter={StaticResource TruckCountToVisibility}, ConverterParameter=2, Mode=OneWay}" Orientation="Horizontal">
+                    <Border Width="30" Height="36" Background="#E74C3C" CornerRadius="6,0,0,6">
+                        <Border Width="10" Height="20" Background="#88FFFFFF" HorizontalAlignment="Left" Margin="4,0,0,0" CornerRadius="2"/>
+                    </Border>
+                    <Border Width="70" Height="36" BorderBrush="#444" BorderThickness="3" Background="#44000000" CornerRadius="0,6,6,0">
+                        <Grid Margin="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="{Binding TruckLoads[2], Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,2,2"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- ДОРОГА 4 (Y=290) -->
+                <Border Canvas.Left="350" Canvas.Top="290" Width="2000" Height="40" Background="#66222222" CornerRadius="0,8,8,0" />
+                <Line Canvas.Left="350" Canvas.Top="310" X1="0" Y1="0" X2="2000" Y2="0" Stroke="#66FFFFFF" StrokeThickness="2" StrokeDashArray="10,10" />
+                <StackPanel Canvas.Top="292" Canvas.Left="{Binding TruckRoadProgress[3], Converter={StaticResource RoadProgressToX}, Mode=OneWay}" Visibility="{Binding ActiveTrucks, Converter={StaticResource TruckCountToVisibility}, ConverterParameter=3, Mode=OneWay}" Orientation="Horizontal">
+                    <Border Width="30" Height="36" Background="#E74C3C" CornerRadius="6,0,0,6">
+                        <Border Width="10" Height="20" Background="#88FFFFFF" HorizontalAlignment="Left" Margin="4,0,0,0" CornerRadius="2"/>
+                    </Border>
+                    <Border Width="70" Height="36" BorderBrush="#444" BorderThickness="3" Background="#44000000" CornerRadius="0,6,6,0">
+                        <Grid Margin="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="{Binding TruckLoads[3], Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,2,2"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- ДОРОГА 5 (Y=360) -->
+                <Border Canvas.Left="350" Canvas.Top="360" Width="2000" Height="40" Background="#66222222" CornerRadius="0,8,8,0" />
+                <Line Canvas.Left="350" Canvas.Top="380" X1="0" Y1="0" X2="2000" Y2="0" Stroke="#66FFFFFF" StrokeThickness="2" StrokeDashArray="10,10" />
+                <StackPanel Canvas.Top="362" Canvas.Left="{Binding TruckRoadProgress[4], Converter={StaticResource RoadProgressToX}, Mode=OneWay}" Visibility="{Binding ActiveTrucks, Converter={StaticResource TruckCountToVisibility}, ConverterParameter=4, Mode=OneWay}" Orientation="Horizontal">
+                    <Border Width="30" Height="36" Background="#E74C3C" CornerRadius="6,0,0,6">
+                        <Border Width="10" Height="20" Background="#88FFFFFF" HorizontalAlignment="Left" Margin="4,0,0,0" CornerRadius="2"/>
+                    </Border>
+                    <Border Width="70" Height="36" BorderBrush="#444" BorderThickness="3" Background="#44000000" CornerRadius="0,6,6,0">
+                        <Grid Margin="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="{Binding TruckLoads[4], Converter={StaticResource PercentToGridLength}, Mode=OneWay}" />
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="1" Background="#FFD700" CornerRadius="0,0,2,2"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Canvas>
+        </Canvas>
+
+        <!-- HUD: ВЕРХНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ (Слой 10 - поверх всего) -->
+        <Border VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="20" Height="90" Background="#E6111111" CornerRadius="16" Panel.ZIndex="10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="5" Opacity="0.5" />
+            </Border.Effect>
+
+            <Grid Margin="20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Command="{Binding StartCommand}" Content="▶ СТАРТ" Background="#28A745" Style="{StaticResource ModernButton}" Margin="0,0,10,0"/>
+                    <Button Command="{Binding StopCommand}" Content="⏹ СТОП" Background="#DC3545" Style="{StaticResource ModernButton}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="40,0">
+                    <TextBlock Text="МОЩНОСТЬ ДОБЫЧИ И КОНВЕЙЕРА" Foreground="#AAAAAA" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                    <Slider Minimum="0" Maximum="100" Value="{Binding ConveyorPower, Mode=TwoWay}" Width="200" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" Text="{Binding StatusText, Mode=OneWay}" Foreground="#A0A0A0" FontSize="16" VerticalAlignment="Center" Margin="20,0,40,0" FontStyle="Italic"/>
+
+                <Border Grid.Column="3" Background="#44000000" CornerRadius="8" Padding="15,5" Margin="0,0,20,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="💰" FontSize="26" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding Money, Mode=OneWay}" Foreground="#FFD700" FontSize="28" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Border>
-            </StackPanel>
 
-            <!-- ТРАНСПОРТЕРЫ (Кастомные бары) -->
-            <StackPanel Grid.Row="4">
-                <TextBlock Text="Транспортеры (нагрузка):" Margin="0,0,0,5"/>
-                <ItemsControl ItemsSource="{Binding TransporterLoads}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Columns="5" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="5">
-                                <Border Height="20" Background="#EEE" BorderBrush="Gray" BorderThickness="1">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="{Binding Path=., Converter={StaticResource PercentToGridLengthConverter}}"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Rectangle Grid.Column="0" Fill="DodgerBlue" />
-                                    </Grid>
-                                </Border>
-                                <TextBlock Text="{Binding Path=., StringFormat={}{0:F0}%}" HorizontalAlignment="Center" FontSize="10" Margin="0,3,0,0"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Grid>
+                <Button Grid.Column="4" Command="{Binding ToggleShopCommand}" Content="🛒 МАГАЗИН" Background="#FFC107" Foreground="Black" Style="{StaticResource ModernButton}" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
 
-        <!-- ПРАВАЯ КОЛОНКА: МАГАЗИН И ЛОГИ -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-
-            <GroupBox Grid.Row="0" Header="Магазин / Прокачка" Margin="0,0,0,10" Padding="10">
+        <!-- ВСПЛЫВАЮЩЕЕ ОКНО МАГАЗИНА -->
+        <Popup IsOpen="{Binding IsShopOpen, Mode=TwoWay}" PlacementTarget="{Binding RelativeSource={RelativeSource AncestorType=Window}}" Placement="Center" AllowsTransparency="True" StaysOpen="True" Panel.ZIndex="20">
+            <Border Background="#F91A1A1A" CornerRadius="20" Padding="40,30" BorderBrush="#FFC107" BorderThickness="2" Width="450">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="40" ShadowDepth="10" Opacity="0.8" />
+                </Border.Effect>
                 <StackPanel>
-                    <TextBlock Text="{Binding ConveyorLevel, StringFormat=Уровень конвейера: {0}}" FontWeight="Bold"/>
-                    <Button Content="{Binding ConveyorUpgradeCost, StringFormat=Улучшить конвейер ({0} монет)}" 
-                            Command="{Binding UpgradeConveyorCommand}" Margin="0,5,0,15" Padding="5"/>
-
-                    <TextBlock Text="{Binding TransporterLevel, StringFormat=Уровень транспортеров: {0}}" FontWeight="Bold"/>
-                    <Button Content="{Binding TransporterUpgradeCost, StringFormat=Улучшить транспортеры ({0} монет)}" 
-                            Command="{Binding UpgradeTransportersCommand}" Margin="0,5,0,0" Padding="5"/>
+                    <TextBlock Text="🛒 МАГАЗИН" FontSize="24" FontWeight="Bold" Foreground="#FFC107" HorizontalAlignment="Center" Margin="0,0,0,25"/>
+                    <Button Command="{Binding BuyTruckCommand}" Content="Купить новый грузовик" Background="#17A2B8" Style="{StaticResource ModernButton}" Height="55" FontSize="16" Margin="0,0,0,15"/>
+                    <Button Command="{Binding UpgradeSellPriceCommand}" Content="Улучшить стоимость песка" Background="#28A745" Style="{StaticResource ModernButton}" Height="55" FontSize="16" Margin="0,0,0,25"/>
+                    <Button Command="{Binding ToggleShopCommand}" Content="Закрыть" Background="#DC3545" Style="{StaticResource ModernButton}" Height="45" FontSize="14" HorizontalAlignment="Stretch"/>
                 </StackPanel>
-            </GroupBox>
-
-            <GroupBox Grid.Row="1" Header="Лог событий" Padding="5">
-                <ListBox ItemsSource="{Binding Logs}" FontSize="11" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,2"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </GroupBox>
-        </Grid>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

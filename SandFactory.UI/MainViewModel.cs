@@ -10,64 +10,28 @@ namespace SandFactory.UI;
 
 public class MainViewModel : INotifyPropertyChanged
 {
-    // --- Модели ---
     private readonly Sea _sea = new();
-    private readonly Conveyor _conveyor = new();
     private readonly SandContainer _container = new();
-    private readonly Transporter[] _transporters = new Transporter[5];
+    private readonly Transporter[] _trucks = new Transporter[5];
 
-    // --- Свойства для UI ---
+    // --- Свойства для HUD ---
     private int _conveyorPower = 50;
     public int ConveyorPower
     {
         get => _conveyorPower;
-        set
-        {
-            if (value < 0) value = 0;
-            if (value > MaxPower) value = MaxPower;
-            _conveyorPower = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public int MaxPower
-    {
-        get => _conveyor.MaxPower;
-        set
-        {
-            _conveyor.MaxPower = value;
-            OnPropertyChanged();
-        }
+        set { if (value >= 0 && value <= 100) _conveyorPower = value; OnPropertyChanged(); }
     }
 
     private double _containerVolume;
     public double ContainerVolume
     {
         get => _containerVolume;
-        set { _containerVolume = value; OnPropertyChanged(); }
-    }
-
-    // НОВОЕ: Процент заполнения контейнера (0-100) для кастомного UI
-    private double _containerFillPercentage;
-    public double ContainerFillPercentage
-    {
-        get => _containerFillPercentage;
-        set { _containerFillPercentage = value; OnPropertyChanged(); }
+        set { _containerVolume = value; OnPropertyChanged(); OnPropertyChanged(nameof(ContainerFillPercentage)); }
     }
 
     private double _containerMax = 100.0;
-    public double ContainerMax
-    {
-        get => _containerMax;
-        set { _containerMax = value; OnPropertyChanged(); }
-    }
-
-    private double[] _transporterLoads = new double[5];
-    public double[] TransporterLoads
-    {
-        get => _transporterLoads;
-        set { _transporterLoads = value; OnPropertyChanged(); }
-    }
+    public double ContainerMax => _containerMax;
+    public double ContainerFillPercentage => (ContainerVolume / ContainerMax) * 100;
 
     private long _money;
     public long Money
@@ -80,70 +44,86 @@ public class MainViewModel : INotifyPropertyChanged
     public bool IsRunning
     {
         get => _isRunning;
-        set
-        {
-            _isRunning = value;
-            OnPropertyChanged();
-            CommandManager.InvalidateRequerySuggested();
-        }
+        set { _isRunning = value; OnPropertyChanged(); CommandManager.InvalidateRequerySuggested(); }
     }
 
-    private string _statusText = "Ожидание запуска...";
+    private string _statusText = "Ожидание...";
     public string StatusText
     {
         get => _statusText;
         set { _statusText = value; OnPropertyChanged(); }
     }
 
-    // --- ПРОКАЧКА И ЭКОНОМИКА ---
-    private int _conveyorLevel = 1;
-    public int ConveyorLevel
+    // --- Магазин ---
+    private bool _isShopOpen;
+    public bool IsShopOpen
     {
-        get => _conveyorLevel;
-        set { _conveyorLevel = value; OnPropertyChanged(); OnPropertyChanged(nameof(ConveyorUpgradeCost)); }
+        get => _isShopOpen;
+        set { _isShopOpen = value; OnPropertyChanged(); }
     }
-    public long ConveyorUpgradeCost => 100 * _conveyorLevel * _conveyorLevel;
 
-    private int _transporterLevel = 1;
-    public int TransporterLevel
+    // --- Данные для отрисовки ---
+    private int _activeTrucks = 1;
+    public int ActiveTrucks
     {
-        get => _transporterLevel;
-        set { _transporterLevel = value; OnPropertyChanged(); OnPropertyChanged(nameof(TransporterUpgradeCost)); }
+        get => _activeTrucks;
+        set { _activeTrucks = value; OnPropertyChanged(); }
     }
-    public long TransporterUpgradeCost => 50 * _transporterLevel * _transporterLevel;
+
+    private double[] _truckRoadProgress = new double[5];
+    public double[] TruckRoadProgress
+    {
+        get => _truckRoadProgress;
+        set { _truckRoadProgress = value; OnPropertyChanged(); }
+    }
+
+    private double[] _truckLoads = new double[5];
+    public double[] TruckLoads
+    {
+        get => _truckLoads;
+        set { _truckLoads = value; OnPropertyChanged(); }
+    }
+
+    // --- ПРОКАЧКА ---
+    private int _sellPriceLevel = 1;
+    public int SellPriceLevel
+    {
+        get => _sellPriceLevel;
+        set { _sellPriceLevel = value; OnPropertyChanged(); OnPropertyChanged(nameof(SellPriceUpgradeCost)); OnPropertyChanged(nameof(CurrentSellPrice)); }
+    }
+    public double CurrentSellPrice => 1 + ((_sellPriceLevel - 1) * 1.8);
+    public long SellPriceUpgradeCost => 150 * _sellPriceLevel * _sellPriceLevel;
+
+    public long TruckUpgradeCost => 500 * _activeTrucks;
+    public bool CanBuyTruck => _activeTrucks < 5;
 
     public ObservableCollection<string> Logs { get; } = new();
-
-    // --- Команды ---
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
-    public ICommand UpgradeConveyorCommand { get; }
-    public ICommand UpgradeTransportersCommand { get; }
+    public ICommand BuyTruckCommand { get; }
+    public ICommand UpgradeSellPriceCommand { get; }
+    public ICommand ToggleShopCommand { get; }
 
     private readonly BackgroundWorker _worker;
     private readonly object _powerLock = new object();
 
     public MainViewModel()
     {
-        for (int i = 0; i < _transporters.Length; i++)
-            _transporters[i] = new Transporter { Id = i + 1, Speed = 1.0 };
-
-        ContainerMax = _container.MaxCapacity;
-
-        _worker = new BackgroundWorker
+        for (int i = 0; i < _trucks.Length; i++)
         {
-            WorkerReportsProgress = true,
-            WorkerSupportsCancellation = true
-        };
+            _trucks[i] = new Transporter { Id = i, MaxLoad = 100.0, State = 0, IsVisible = (i == 0) };
+        }
 
+        _worker = new BackgroundWorker { WorkerReportsProgress = true, WorkerSupportsCancellation = true };
         _worker.DoWork += Worker_DoWork;
         _worker.ProgressChanged += Worker_ProgressChanged;
         _worker.RunWorkerCompleted += Worker_RunWorkerCompleted;
 
         StartCommand = new RelayCommand(StartSimulation, () => !IsRunning);
         StopCommand = new RelayCommand(StopSimulation, () => IsRunning);
-        UpgradeConveyorCommand = new RelayCommand(UpgradeConveyor);
-        UpgradeTransportersCommand = new RelayCommand(UpgradeTransporters);
+        BuyTruckCommand = new RelayCommand(BuyTruck, () => CanBuyTruck);
+        UpgradeSellPriceCommand = new RelayCommand(UpgradeSellPrice);
+        ToggleShopCommand = new RelayCommand(() => IsShopOpen = !IsShopOpen);
     }
 
     private void StartSimulation()
@@ -151,42 +131,36 @@ public class MainViewModel : INotifyPropertyChanged
         if (!_worker.IsBusy)
         {
             IsRunning = true;
-            StatusText = "Симуляция запущена...";
+            StatusText = "В РАБОТЕ";
             _worker.RunWorkerAsync();
         }
     }
 
     private void StopSimulation()
     {
-        if (_worker.IsBusy)
+        if (_worker.IsBusy) { _worker.CancelAsync(); StatusText = "ПАУЗА"; }
+    }
+
+    private void BuyTruck()
+    {
+        if (Money >= TruckUpgradeCost && CanBuyTruck)
         {
-            _worker.CancelAsync();
-            StatusText = "Остановка...";
+            Money -= TruckUpgradeCost;
+            ActiveTrucks++;
+            _trucks[ActiveTrucks - 1].IsVisible = true;
+            Logs.Add($"[Магазин] Куплен новый грузовик! Всего: {ActiveTrucks}");
+            OnPropertyChanged(nameof(TruckUpgradeCost));
+            OnPropertyChanged(nameof(CanBuyTruck));
         }
     }
 
-    private void UpgradeConveyor()
+    private void UpgradeSellPrice()
     {
-        if (Money >= ConveyorUpgradeCost)
+        if (Money >= SellPriceUpgradeCost)
         {
-            Money -= ConveyorUpgradeCost;
-            ConveyorLevel++;
-            MaxPower += 50;
-            Logs.Add($"[Магазин] Конвейер улучшен до ур. {ConveyorLevel}. Лимит мощности: {MaxPower}");
-        }
-    }
-
-    private void UpgradeTransporters()
-    {
-        if (Money >= TransporterUpgradeCost)
-        {
-            Money -= TransporterUpgradeCost;
-            TransporterLevel++;
-            foreach (var t in _transporters)
-            {
-                t.Speed += 0.5;
-            }
-            Logs.Add($"[Магазин] Транспортеры улучшены до ур. {TransporterLevel}. Скорость: {_transporters[0].Speed:F1}");
+            Money -= SellPriceUpgradeCost;
+            SellPriceLevel++;
+            Logs.Add($"[Магазин] Цена продажи выросла до {CurrentSellPrice:F1} монет за единицу.");
         }
     }
 
@@ -196,36 +170,66 @@ public class MainViewModel : INotifyPropertyChanged
         long tickCounter = 0;
         _container.CurrentVolume = 0;
 
+        for (int i = 0; i < ActiveTrucks; i++)
+        {
+            _trucks[i].State = 0;
+            _trucks[i].RoadProgress = 0;
+            _trucks[i].CurrentLoad = 0;
+        }
+
         while (!worker.CancellationPending)
         {
             int safePower;
             lock (_powerLock) { safePower = _conveyorPower; }
-
             tickCounter++;
 
-            double generatedSand = _sea.BaseGenerationRate * (safePower / 100.0);
+            // Замедленная генерация песка
+            double generatedSand = 1.5 * (safePower / 100.0);
+            _container.CurrentVolume = Math.Min(_container.CurrentVolume + generatedSand, _container.MaxCapacity);
 
-            _container.CurrentVolume += generatedSand;
-            bool isOverflowing = false;
-            if (_container.CurrentVolume > _container.MaxCapacity)
+            long earnedMoneyThisTick = 0;
+
+            for (int i = 0; i < ActiveTrucks; i++)
             {
-                _container.CurrentVolume = _container.MaxCapacity;
-                isOverflowing = true;
+                var truck = _trucks[i];
+                switch (truck.State)
+                {
+                    case 0: // Едет к контейнеру
+                        truck.RoadProgress += 1.5;
+                        if (truck.RoadProgress >= 100) { truck.RoadProgress = 100; truck.State = 1; }
+                        break;
+
+                    case 1: // Загружается (стоит)
+                        double spaceInTruck = truck.MaxLoad - truck.CurrentLoad;
+                        double amountToLoad = Math.Min(_container.CurrentVolume, spaceInTruck);
+                        amountToLoad = Math.Min(amountToLoad, 1.0); // Скорость погрузки
+
+                        _container.CurrentVolume -= amountToLoad;
+                        truck.CurrentLoad += amountToLoad;
+
+                        if (truck.CurrentLoad >= truck.MaxLoad) { truck.State = 2; }
+                        break;
+
+                    case 2: // Уезжает с грузом
+                        truck.RoadProgress += 1.5;
+                        if (truck.RoadProgress >= 120)
+                        {
+                            earnedMoneyThisTick += (long)(truck.CurrentLoad * CurrentSellPrice);
+                            truck.CurrentLoad = 0;
+                            truck.IsVisible = false;
+                            truck.State = 3;
+                        }
+                        break;
+
+                    case 3: // Возвращается пустой
+                        if (truck.RoadProgress > 0) truck.RoadProgress = -20; // Респавн слева
+                        truck.RoadProgress += 1.5;
+
+                        if (truck.RoadProgress >= 0) truck.IsVisible = true;
+                        if (truck.RoadProgress >= 100) { truck.RoadProgress = 100; truck.State = 0; }
+                        break;
+                }
             }
-
-            double totalTakenByTransporters = 0;
-            for (int i = 0; i < _transporters.Length; i++)
-            {
-                var t = _transporters[i];
-                double amountToTake = t.Speed;
-                if (amountToTake > _container.CurrentVolume) amountToTake = _container.CurrentVolume;
-
-                _container.CurrentVolume -= amountToTake;
-                totalTakenByTransporters += amountToTake;
-                t.CurrentLoad = t.Speed > 0 ? (amountToTake / t.Speed) : 0;
-            }
-
-            long earnedMoney = (long)(totalTakenByTransporters * 10);
 
             var snapshot = new SimulationSnapshot
             {
@@ -233,13 +237,17 @@ public class MainViewModel : INotifyPropertyChanged
                 CurrentPower = safePower,
                 ContainerVolume = _container.CurrentVolume,
                 ContainerMax = _container.MaxCapacity,
-                MoneyEarnedThisTick = earnedMoney,
-                IsOverflowing = isOverflowing,
-                TransporterLoads = new double[5]
+                MoneyEarnedThisTick = earnedMoneyThisTick,
+                ActiveTrucks = ActiveTrucks,
+                TruckRoadProgress = new double[5],
+                TruckLoads = new double[5]
             };
 
-            for (int i = 0; i < _transporters.Length; i++)
-                snapshot.TransporterLoads[i] = _transporters[i].CurrentLoad * 100;
+            for (int i = 0; i < 5; i++)
+            {
+                snapshot.TruckRoadProgress[i] = _trucks[i].RoadProgress;
+                snapshot.TruckLoads[i] = (_trucks[i].CurrentLoad / _trucks[i].MaxLoad) * 100;
+            }
 
             worker.ReportProgress(0, snapshot);
             Thread.Sleep(100);
@@ -252,38 +260,17 @@ public class MainViewModel : INotifyPropertyChanged
         if (e.UserState is SimulationSnapshot snapshot)
         {
             ContainerVolume = snapshot.ContainerVolume;
-            ContainerMax = snapshot.ContainerMax;
-
-            // ХИТРОСТЬ: Если контейнер переполнен, рисуем 100%. 
-            // Иначе считаем реальный процент (но не больше 100).
-            if (snapshot.IsOverflowing)
-            {
-                ContainerFillPercentage = 100.0;
-            }
-            else
-            {
-                ContainerFillPercentage = snapshot.ContainerMax > 0
-                    ? (snapshot.ContainerVolume / snapshot.ContainerMax) * 100
-                    : 0;
-            }
-
             Money += snapshot.MoneyEarnedThisTick;
-            TransporterLoads = snapshot.TransporterLoads;
-
-            StatusText = $"Такт: {snapshot.Ticks} | Мощность: {snapshot.CurrentPower}%";
-
-            if (snapshot.IsOverflowing && snapshot.Ticks % 20 == 0)
-            {
-                Logs.Add($"[Внимание] Контейнер переполнен! Песок просыпается.");
-            }
+            ActiveTrucks = snapshot.ActiveTrucks;
+            TruckRoadProgress = snapshot.TruckRoadProgress;
+            TruckLoads = snapshot.TruckLoads;
         }
     }
 
     private void Worker_RunWorkerCompleted(object? sender, RunWorkerCompletedEventArgs e)
     {
         IsRunning = false;
-        if (e.Cancelled) StatusText = "Остановлено.";
-        else if (e.Error != null) StatusText = $"Ошибка: {e.Error.Message}";
+        if (e.Cancelled) StatusText = "ОСТАНОВЛЕНО";
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

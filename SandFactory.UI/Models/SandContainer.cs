@@ -1,6 +1,5 @@
 ﻿namespace SandFactory.UI.Models;
 
-// Переименовали Container в SandContainer
 public class SandContainer
 {
     public double CurrentVolume { get; set; } = 0;
